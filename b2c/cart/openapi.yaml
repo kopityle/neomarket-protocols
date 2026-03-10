@@ -6,6 +6,10 @@ info:
     Проектируется синдикатом Interface.
     Домены: корзина (CRUD), избранное, главная страница (баннеры, подборки).
 
+tags:
+  - name: Избранное
+    description: Операции с избранными товарами
+
 paths:
   /api/v1/favorites:
     get:
@@ -14,16 +18,16 @@ paths:
       summary: Получение списка избранных товаров
       description: |
         Возвращает список товаров, добавленных пользователем в избранное.
-        Сервис хранит только productId и обращается в B2B с батч-запросом
+        Сервис хранит только product_id и обращается в B2B с батч-запросом
         для получения актуальной информации о товарах, их SKU, ценах и наличии.
 
         Если B2B временно недоступен — возвращается ошибка 503.
         Товары, которые не найдены в B2B (например, удалены из каталога),
         исключаются из списка `items` и их идентификаторы возвращаются в поле
-        `unavailableIds`. Клиент может предложить пользователю очистить их.
+        `unavailable_ids`. Клиент может предложить пользователю очистить их.
 
       parameters:
-        - name: userId
+        - name: user_id
           in: query
           required: true
           description: Идентификатор пользователя (UUID)
@@ -76,7 +80,7 @@ paths:
                         - id: "7c9e6679-7425-40de-944b-e07fc1f90ae7"
                           name: "256GB Black"
                           price: 12999000
-                          activeQuantity: 5
+                          active_quantity: 5
                           characteristics:
                             - name: "Цвет"
                               value: "Чёрный"
@@ -85,10 +89,10 @@ paths:
                         - id: "8a4e3f9c-1a2b-4c8d-9e5f-6b7a8c9d0e1f"
                           name: "256GB White"
                           price: 12999000
-                          activeQuantity: 0
-                    addedAt: "2025-03-09T12:00:00Z"
+                          active_quantity: 0
+                    added_at: "2025-03-09T12:00:00Z"
                 total: 1
-                unavailableIds:
+                unavailable_ids:
                   - "9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d"
                   - "1e2a3b4c-5d6e-7f8a-9b0c-1d2e3f4a5b6c"
 
@@ -132,7 +136,7 @@ paths:
                 code: "B2B_UNAVAILABLE"
                 message: "Сервис товаров временно недоступен, попробуйте позже"
 
-  /api/v1/favorites/{productId}:
+  /api/v1/favorites/{product_id}:
     post:
       tags:
         - Избранное
@@ -143,7 +147,7 @@ paths:
         чтобы операция была безопасной для повторного вызова.
 
       parameters:
-        - name: productId
+        - name: product_id
           in: path
           required: true
           description: Идентификатор товара (UUID)
@@ -151,7 +155,7 @@ paths:
             type: string
             format: uuid
             example: "550e8400-e29b-41d4-a716-446655440000"
-        - name: userId
+        - name: user_id
           in: query
           required: true
           description: Идентификатор пользователя (UUID)
@@ -168,9 +172,9 @@ paths:
               schema:
                 $ref: "#/components/schemas/FavoriteMutationResponse"
               example:
-                productId: "550e8400-e29b-41d4-a716-446655440000"
-                userId: "123e4567-e89b-12d3-a456-426614174000"
-                addedAt: "2025-03-10T10:00:00Z"
+                product_id: "550e8400-e29b-41d4-a716-446655440000"
+                user_id: "123e4567-e89b-12d3-a456-426614174000"
+                added_at: "2025-03-10T10:00:00Z"
                 message: "Товар добавлен в избранное"
 
         "200":
@@ -180,9 +184,9 @@ paths:
               schema:
                 $ref: "#/components/schemas/FavoriteMutationResponse"
               example:
-                productId: "550e8400-e29b-41d4-a716-446655440000"
-                userId: "123e4567-e89b-12d3-a456-426614174000"
-                addedAt: "2025-03-10T10:00:00Z"
+                product_id: "550e8400-e29b-41d4-a716-446655440000"
+                user_id: "123e4567-e89b-12d3-a456-426614174000"
+                added_at: "2025-03-10T10:00:00Z"
                 message: "Товар уже находится в избранном"
 
         "400":
@@ -193,7 +197,7 @@ paths:
                 $ref: "#/components/schemas/ErrorResponse"
               example:
                 code: "INVALID_PARAMETER"
-                message: "Некорректный UUID productId или userId"
+                message: "Некорректный UUID product_id или user_id"
 
         "401":
           description: Пользователь не авторизован
@@ -234,7 +238,7 @@ paths:
         Если товара не было в избранном, можно всё равно вернуть 204.
 
       parameters:
-        - name: productId
+        - name: product_id
           in: path
           required: true
           description: Идентификатор товара (UUID)
@@ -242,7 +246,7 @@ paths:
             type: string
             format: uuid
             example: "550e8400-e29b-41d4-a716-446655440000"
-        - name: userId
+        - name: user_id
           in: query
           required: true
           description: Идентификатор пользователя (UUID)
@@ -263,7 +267,7 @@ paths:
                 $ref: "#/components/schemas/ErrorResponse"
               example:
                 code: "INVALID_PARAMETER"
-                message: "Некорректный UUID productId или userId"
+                message: "Некорректный UUID product_id или user_id"
 
         "401":
           description: Пользователь не авторизован
@@ -351,7 +355,7 @@ components:
           type: integer
           description: Цена в копейках
           example: 12999000
-        activeQuantity:
+        active_quantity:
           type: integer
           description: Доступное количество на складе
           example: 5
@@ -363,7 +367,7 @@ components:
         - id
         - name
         - price
-        - activeQuantity
+        - active_quantity
 
     Product:
       type: object
@@ -411,14 +415,14 @@ components:
       properties:
         product:
           $ref: "#/components/schemas/Product"
-        addedAt:
+        added_at:
           type: string
           format: date-time
           description: Дата и время добавления товара в избранное
           example: "2025-03-09T12:00:00Z"
       required:
         - product
-        - addedAt
+        - added_at
 
     FavoritesResponse:
       type: object
@@ -432,7 +436,7 @@ components:
           type: integer
           description: Общее количество товаров в избранном (без учёта пагинации)
           example: 5
-        unavailableIds:
+        unavailable_ids:
           type: array
           items:
             type: string
@@ -447,20 +451,20 @@ components:
       required:
         - items
         - total
-        - unavailableIds
+        - unavailable_ids
 
     FavoriteMutationResponse:
       type: object
       properties:
-        productId:
+        product_id:
           type: string
           format: uuid
           example: "550e8400-e29b-41d4-a716-446655440000"
-        userId:
+        user_id:
           type: string
           format: uuid
           example: "123e4567-e89b-12d3-a456-426614174000"
-        addedAt:
+        added_at:
           type: string
           format: date-time
           example: "2025-03-10T10:00:00Z"
@@ -468,9 +472,9 @@ components:
           type: string
           example: "Товар добавлен в избранное"
       required:
-        - productId
-        - userId
-        - addedAt
+        - product_id
+        - user_id
+        - added_at
         - message
 
     ErrorResponse:
