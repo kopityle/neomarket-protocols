@@ -991,6 +991,7 @@ paths:
               example:
                 code: "SERVICE_UNAVAILABLE"
                 message: "Сервис временно недоступен, попробуйте позже"
+
   /cart/validate:
     get:
       summary: Валидация корзины
@@ -1121,21 +1122,16 @@ paths:
                   summary: Неверный формат
                   value:
                     code: "INVALID_PARAMETER"
-                    message: "Неверный формат параметра cart_item_ids"
-                    details:
-                      parameter: "cart_item_ids"
-                      reason: "Ожидается массив строк"
+                    message: "Неверный формат параметра cart_item_ids. Ожидается массив строк."
                 items_not_found:
                   summary: ID не найдены
                   value:
-                    code: "INVALID_PARAMETER"
-                    message: "Указанные позиции не найдены"
-                    details:
-                      invalid_ids: ["ci_999"]
+                    code: "CART_ITEMS_NOT_FOUND"
+                    message: "Указанные позиции не найдены: ci_999"
                 cart_empty:
                   summary: Корзина пуста
                   value:
-                    code: "INVALID_PARAMETER"
+                    code: "CART_EMPTY"
                     message: "Корзина пуста"
         
         '401':
@@ -1164,12 +1160,6 @@ paths:
           description: |
             Сервис B2B временно недоступен.
             Невозможно провести валидацию корзины.
-          headers:
-            Retry-After:
-              description: Рекомендуемое время ожидания перед повторной попыткой (в секундах)
-              schema:
-                type: integer
-                example: 30
           content:
             application/json:
               schema:
@@ -1177,18 +1167,11 @@ paths:
               example:
                 code: "B2B_SERVICE_UNAVAILABLE"
                 message: "Сервис каталога временно недоступен. Попробуйте позже"
-                retry_after: 30
         
         '504':
           description: |
             Таймаут при обращении к B2B сервису (Gateway Timeout).
             B2B не ответил в течение ожидаемого времени.
-          headers:
-            Retry-After:
-              description: Рекомендуемое время ожидания перед повторной попыткой (в секундах)
-              schema:
-                type: integer
-                example: 60
           content:
             application/json:
               schema:
@@ -1196,7 +1179,6 @@ paths:
               example:
                 code: "B2B_GATEWAY_TIMEOUT"
                 message: "Сервис каталога не ответил вовремя. Попробуйте позже"
-                retry_after: 60
 
   # ========== ГЛАВНАЯ — БАННЕРЫ (Блок И, команда Изи 90) ==========
   /api/v1/home/banners:
@@ -1516,25 +1498,25 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                $ref: '#/components/schemas/ValidationErrorResponse'
         '404':
           description: Исходный товар не найден
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                $ref: '#/components/schemas/ValidationErrorResponse'
         '503':
           description: Product Service (B2B) временно недоступен
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                $ref: '#/components/schemas/ValidationErrorResponse'
         '504':
           description: Таймаут ответа B2B
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                $ref: '#/components/schemas/ValidationErrorResponse'
 components:
 
   securitySchemes:
@@ -2034,16 +2016,7 @@ components:
           description: Название товара
           example: "iPhone 15 Pro Max"
 
-    # ----- СХЕМЫ ВАЛИДАЦИИ КОРЗИНЫ -----
-    security:
-      bearerAuth:
-        type: http
-        scheme: bearer
-        bearerFormat: JWT
-        description: |
-          JWT токен пользователя.
-          Получается при авторизации через POST /api/v1/auth/login
-          
+    # ----- СХЕМЫ ВАЛИДАЦИИ КОРЗИНЫ -----          
     CartValidationResponse:
       type: object
       required:
@@ -2210,30 +2183,6 @@ components:
                 Описание технической ошибки.
                 Присутствует для issue_type = VALIDATION_ERROR
               example: "B2B service returned 500"
-
-    ErrorResponse:
-      type: object
-      required:
-        - code
-        - message
-      properties:
-        code:
-          type: string
-          description: Машиночитаемый код ошибки
-          example: "UNAUTHORIZED"
-        message:
-          type: string
-          description: Человекочитаемое описание ошибки
-          example: "Требуется авторизация"
-        retry_after:
-          type: integer
-          description: Рекомендуемое время ожидания перед повторной попыткой (в секундах). Актуально для 503 и 504.
-          example: 30
-        details:
-          type: object
-          description: Дополнительные детали ошибки (опционально, для 400)
-          example:
-            invalid_ids: ["ci_999"]
             
     # ----- СХЕМЫ ДЛЯ БАННЕРОВ (Блок И, команда Изи 90) -----
     BannerListResponse:
