@@ -342,16 +342,16 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/SubscribeRequest'
+              $ref: "#/components/schemas/SubscribeRequest"
             example:
               notify_on: ["IN_STOCK", "PRICE_DOWN"]
       responses:
-        '201':
+        "201":
           description: Подписка успешно создана
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/SubscriptionResponse'
+                $ref: "#/components/schemas/SubscriptionResponse"
               example:
                 id: "6b9c1f4c-4b7c-4f8a-9a3b-6a8a2f95e2d1"
                 product:
@@ -380,57 +380,57 @@ paths:
                           value: "256 ГБ"
                 notify_on: ["IN_STOCK", "PRICE_DOWN"]
                 created_at: "2026-03-09T12:00:00Z"
-        '400':
+        "400":
           description: Невалидный запрос — пустой или некорректный массив notify_on
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                $ref: "#/components/schemas/ErrorResponse"
               example:
                 code: "INVALID_NOTIFY_ON"
                 message: "Должен быть указан хотя бы один тип уведомления"
-        '401':
+        "401":
           description: Токен отсутствует или невалиден
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                $ref: "#/components/schemas/ErrorResponse"
               example:
                 code: "UNAUTHORIZED"
                 message: "Токен отсутствует или невалиден"
-        '404':
+        "404":
           description: Товар с указанным UUID не найден в Product Service
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                $ref: "#/components/schemas/ErrorResponse"
               example:
                 code: "PRODUCT_NOT_FOUND"
                 message: "Товар с указанным идентификатором не найден"
-        '409':
+        "409":
           description: Подписка на данный товар уже существует
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                $ref: "#/components/schemas/ErrorResponse"
               example:
                 code: "SUBSCRIPTION_ALREADY_EXISTS"
                 message: "Вы уже подписаны на уведомления об этом товаре"
-        '500':
+        "500":
           description: Внутренняя ошибка сервера
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                $ref: "#/components/schemas/ErrorResponse"
               example:
                 code: "INTERNAL_SERVER_ERROR"
                 message: "Произошла внутренняя ошибка сервера"
-        '503':
+        "503":
           description: Product Service (B2B) временно недоступен
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                $ref: "#/components/schemas/ErrorResponse"
               example:
                 code: "SERVICE_UNAVAILABLE"
                 message: "Сервис временно недоступен, попробуйте позже"
@@ -440,32 +440,116 @@ paths:
     get:
       tags:
         - Корзина
-      summary: "Получить текущий состав корзины"
-      description: "Возвращает список товаров в корзине."
+      summary: Просмотр корзины с актуальными ценами
+      description: |
+        Возвращает содержимое корзины текущего пользователя с актуальными данными
+        из B2B (цены, остатки, названия, фото).
+
+        B2C хранит только `(user_id, sku_id, quantity)`. Всё остальное подгружается
+        из B2B батч-запросом по списку SKU.
+
+        Недоступные товары не удаляются из корзины - они возвращаются
+        с флагом `available: false` и причиной в `unavailable_reason`.
+
+        Если B2B не отвечает или таймаутит - возвращается `500 UPSTREAM_ERROR`.
+
+      parameters:
+        - name: X-User-Id
+          in: header
+          required: true
+          description: Идентификатор покупателя
+          schema:
+            type: string
+            format: uuid
+            example: "123e4567-e89b-12d3-a456-426614174000"
+
       responses:
-        '200':
-          description: "Успешное получение корзины"
+        "200":
+          description: |
+            Содержимое корзины (может быть пустым - тогда `items: []` и нулевой `summary`).
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  items:
-                    type: array
+                $ref: "#/components/schemas/CartResponse"
+              examples:
+                with_items:
+                  summary: Корзина с доступными и недоступным товаром
+                  value:
                     items:
-                      $ref: '#/components/schemas/CartItem'
-        '400':
-          description: "Некорректный запрос"
+                      - sku_id: "7c9e6679-7425-40de-944b-e07fc1f90ae7"
+                        quantity: 1
+                        product_id: "550e8400-e29b-41d4-a716-446655440000"
+                        product_title: "iPhone 15 Pro Max"
+                        sku_name: "256GB Black"
+                        image: "/s3/iphone15-1.jpg"
+                        price: 12999000
+                        active_quantity: 5
+                        item_total: 12999000
+                        available: true
+                        unavailable_reason: null
+                      - sku_id: "8a4e3f9c-1a2b-4c8d-9e5f-6b7a8c9d0e1f"
+                        quantity: 2
+                        product_id: "6ba7b810-9dad-11d1-80b4-00c04fd430c8"
+                        product_title: "Чехол силиконовый"
+                        sku_name: "Прозрачный"
+                        image: "/s3/case-1.jpg"
+                        price: 299000
+                        active_quantity: 2
+                        item_total: 598000
+                        available: true
+                        unavailable_reason: null
+                      - sku_id: "9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d"
+                        quantity: 1
+                        product_id: "1e2a3b4c-5d6e-7f8a-9b0c-1d2e3f4a5b6c"
+                        product_title: "Кроссовки Nike Air Max"
+                        sku_name: "42 размер"
+                        image: "/s3/nike-1.jpg"
+                        price: 899000
+                        active_quantity: 0
+                        item_total: 0
+                        available: false
+                        unavailable_reason: "OUT_OF_STOCK"
+                    summary:
+                      total_amount: 13597000
+                      total_items: 3
+                      available_items: 2
+
+                empty_cart:
+                  summary: Пустая корзина
+                  value:
+                    items: []
+                    summary:
+                      total_amount: 0
+                      total_items: 0
+                      available_items: 0
+
+        "401":
+          description: Нет заголовка `X-User-Id` или он невалидный
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '401':
-          description: "Не авторизован"
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                code: "UNAUTHORIZED"
+                message: "Missing or invalid X-User-Id"
+
+        "500":
+          description: B2B не ответил (timeout, 5xx) или внутренняя ошибка B2C
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                $ref: "#/components/schemas/ErrorResponse"
+              examples:
+                upstream_error:
+                  summary: B2B недоступен
+                  value:
+                    code: "UPSTREAM_ERROR"
+                    message: "Failed to fetch product data from B2B"
+                internal_error:
+                  summary: Внутренняя ошибка B2C
+                  value:
+                    code: "INTERNAL_ERROR"
+                    message: "Unexpected server error"
 
     post:
       tags:
@@ -495,30 +579,30 @@ paths:
                   minimum: 1
                   example: 2
       responses:
-        '200':
+        "200":
           description: "Товар успешно добавлен"
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/CartItem'
-        '400':
+                $ref: "#/components/schemas/CartItemLegacy"
+        "400":
           description: "Некорректные данные"
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '401':
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
           description: "Не авторизован"
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '409':
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
           description: "Товар уже в корзине или недоступен"
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
+                $ref: "#/components/schemas/Error"
               examples:
                 alreadyInCart:
                   value:
@@ -535,14 +619,14 @@ paths:
       summary: "Удалить все товары из корзины"
       description: "Полностью очищает корзину, удаляя все товары."
       responses:
-        '204':
+        "204":
           description: "Корзина успешно очищена"
-        '401':
+        "401":
           description: "Не авторизован"
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                $ref: "#/components/schemas/ErrorResponse"
 
   /api/v1/cart/{item_id}:
     get:
@@ -560,30 +644,30 @@ paths:
           description: "ID товара в корзине"
           example: "f47ac10b-58cc-4372-a567-0e02b2c3d479"
       responses:
-        '200':
+        "200":
           description: "Успешное получение товара"
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/CartItem'
-        '404':
+                $ref: "#/components/schemas/CartItemLegacy"
+        "404":
           description: "Товар не найден или удален"
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '401':
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
           description: "Не авторизован"
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '503':
+                $ref: "#/components/schemas/ErrorResponse"
+        "503":
           description: "Сервис B2B недоступен"
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
+                $ref: "#/components/schemas/Error"
               example:
                 code: B2B_UNAVAILABLE
                 message: "B2B сервис временно недоступен. Повторите попытку позже."
@@ -614,36 +698,36 @@ paths:
                   minimum: 1
                   example: 3
       responses:
-        '200':
+        "200":
           description: "Обновлено успешно"
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/CartItem'
-        '400':
+                $ref: "#/components/schemas/CartItemLegacy"
+        "400":
           description: "Некорректные данные"
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '404':
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
           description: "Товар не найден"
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '401':
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
           description: "Не авторизован"
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '409':
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
           description: "Недоступен или конфликт"
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
+                $ref: "#/components/schemas/Error"
               examples:
                 out_of_stock:
                   value:
@@ -669,20 +753,20 @@ paths:
           description: "ID товара в корзине"
           example: "f47ac10b-58cc-4372-a567-0e02b2c3d479"
       responses:
-        '204':
+        "204":
           description: "Товар успешно удален"
-        '404':
+        "404":
           description: "Товар не найден"
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '401':
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
           description: "Не авторизован"
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                $ref: "#/components/schemas/ErrorResponse"
 
   # --- ИЗМЕНЕНИЕ КОЛ-ВА ТОВАРОВ ---
   /api/v1/cart/items:
@@ -1034,7 +1118,7 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
-  
+
   # ========== ПОДБОРКИ ==========
   /api/v1/collections/{collection_id}/products:
     get:
@@ -1140,7 +1224,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/AlsoBoughtResponse'
+                $ref: "#/components/schemas/AlsoBoughtResponse"
               example:
                 recommended_product_ids:
                   - "550e8400-e29b-41d4-a716-446655440000"
@@ -1152,7 +1236,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                $ref: "#/components/schemas/ErrorResponse"
               example:
                 code: UNAUTHORIZED
                 message: Invalid or missing JWT token
@@ -1162,7 +1246,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                $ref: "#/components/schemas/ErrorResponse"
               example:
                 code: EMPTY_CART
                 message: Cannot generate recommendations for empty cart
@@ -1172,7 +1256,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                $ref: "#/components/schemas/ErrorResponse"
               example:
                 code: INTERNAL_ERROR
                 message: Unexpected server error
@@ -1182,7 +1266,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                $ref: "#/components/schemas/ErrorResponse"
               example:
                 code: B2B_UNAVAILABLE
                 message: Product service temporarily unavailable
@@ -1463,7 +1547,7 @@ components:
           description: UUID подписки
           example: "6b9c1f4c-4b7c-4f8a-9a3b-6a8a2f95e2d1"
         product:
-          $ref: '#/components/schemas/Product'
+          $ref: "#/components/schemas/Product"
         notify_on:
           type: array
           description: События, на которые подписан пользователь
@@ -1477,9 +1561,118 @@ components:
           description: Дата создания подписки
           example: "2026-03-09T12:00:00Z"
 
-    # ----- СХЕМЫ ДЛЯ КОРЗИНЫ -----
+    # ----- СХЕМЫ ДЛЯ КОРЗИНЫ (обогащённая версия для GET /cart) -----
     CartItem:
       type: object
+      description: Позиция в корзине, обогащённая данными из B2B
+      properties:
+        sku_id:
+          type: string
+          format: uuid
+          description: ID варианта (SKU) - хранится в B2C
+          example: "7c9e6679-7425-40de-944b-e07fc1f90ae7"
+        quantity:
+          type: integer
+          description: Количество штук, добавленных покупателем - хранится в B2C
+          minimum: 1
+          example: 1
+        product_id:
+          type: string
+          format: uuid
+          description: ID товара-родителя - из B2B
+          example: "550e8400-e29b-41d4-a716-446655440000"
+        product_title:
+          type: string
+          description: Название товара - из B2B
+          example: "iPhone 15 Pro Max"
+        sku_name:
+          type: string
+          description: Название варианта - из B2B
+          example: "256GB Black"
+        image:
+          type: string
+          description: URL главного фото - из B2B
+          example: "/s3/iphone15-1.jpg"
+        price:
+          type: integer
+          description: Цена в копейках - из B2B
+          example: 12999000
+        active_quantity:
+          type: integer
+          description: Остаток на складе - из B2B
+          example: 5
+        item_total:
+          type: integer
+          description: "price × quantity в копейках (0, если товар недоступен) - рассчитывается B2C"
+          example: 12999000
+        available:
+          type: boolean
+          description: Можно ли оформить эту позицию - рассчитывается B2C
+          example: true
+        unavailable_reason:
+          type: string
+          nullable: true
+          description: |
+            Причина недоступности. `null`, если товар доступен.
+            Возможные значения: OUT_OF_STOCK, BLOCKED, DELETED.
+          enum:
+            - OUT_OF_STOCK
+            - BLOCKED
+            - DELETED
+            - null
+          example: null
+      required:
+        - sku_id
+        - quantity
+        - product_id
+        - product_title
+        - sku_name
+        - image
+        - price
+        - active_quantity
+        - item_total
+        - available
+        - unavailable_reason
+
+    CartSummary:
+      type: object
+      description: Итоги по корзине
+      properties:
+        total_amount:
+          type: integer
+          description: Сумма только по доступным позициям, в копейках
+          example: 13597000
+        total_items:
+          type: integer
+          description: Общее количество позиций в корзине
+          example: 3
+        available_items:
+          type: integer
+          description: Сколько позиций можно оформить
+          example: 2
+      required:
+        - total_amount
+        - total_items
+        - available_items
+
+    CartResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          description: Список позиций корзины (обогащённых данными из B2B)
+          items:
+            $ref: "#/components/schemas/CartItem"
+        summary:
+          $ref: "#/components/schemas/CartSummary"
+      required:
+        - items
+        - summary
+
+    # Старая схема CartItem для POST/PUT/GET по item_id (сохранена для обратной совместимости)
+    CartItemLegacy:
+      type: object
+      description: Позиция корзины (используется в POST, PUT, GET по item_id)
       properties:
         id:
           type: string
@@ -1763,12 +1956,10 @@ components:
         - code
         - message
 
-    # ----- СХЕМЫ ДЛЯ ПОДБОРОК  продутов-----
-
+    # ----- СХЕМЫ ДЛЯ ПОДБОРОК продуктов -----
     CollectionProductsResponse:
       type: object
       properties:
-
         collection_title:
           type: string
           description: Название подборки
