@@ -13,6 +13,8 @@ tags:
     description: Операции с корзиной
   - name: Подписка
     description: Подписки на уведомления о товарах
+  - name: Главная — Баннеры
+    description: Баннеры на главной странице и аналитика (показы, клики)
 
 paths:
   # ========== ИЗБРАННОЕ ==========
@@ -329,7 +331,7 @@ paths:
             schema:
               $ref: '#/components/schemas/SubscribeRequest'
             example:
-              notifyOn: ["IN_STOCK", "PRICE_DOWN"]
+              notify_on: ["IN_STOCK", "PRICE_DOWN"]
       responses:
         '201':
           description: Подписка успешно создана
@@ -363,10 +365,10 @@ paths:
                           value: "Чёрный"
                         - name: "Объём памяти"
                           value: "256 ГБ"
-                notifyOn: ["IN_STOCK", "PRICE_DOWN"]
-                createdAt: "2026-03-09T12:00:00Z"
+                notify_on: ["IN_STOCK", "PRICE_DOWN"]
+                created_at: "2026-03-09T12:00:00Z"
         '400':
-          description: Невалидный запрос — пустой или некорректный массив notifyOn
+          description: Невалидный запрос — пустой или некорректный массив notify_on
           content:
             application/json:
               schema:
@@ -464,12 +466,12 @@ paths:
             schema:
               type: object
               properties:
-                productId:
+                product_id:
                   type: string
                   format: uuid
                   description: "Идентификатор товара"
                   example: "550e8400-e29b-41d4-a716-446655440000"
-                skuId:
+                sku_id:
                   type: string
                   format: uuid
                   description: "Идентификатор SKU"
@@ -529,14 +531,14 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
 
-  /api/v1/cart/{itemId}:
+  /api/v1/cart/{item_id}:
     get:
       tags:
         - Корзина
       summary: "Получить товар из корзины по ID"
       description: "Возвращает товар по его ID, с учетом статуса доступности."
       parameters:
-        - name: itemId
+        - name: item_id
           in: path
           required: true
           schema:
@@ -579,7 +581,7 @@ paths:
       summary: "Обновить количество товара в корзине"
       description: "Обновляет количество выбранного товара."
       parameters:
-        - name: itemId
+        - name: item_id
           in: path
           required: true
           schema:
@@ -645,7 +647,7 @@ paths:
       summary: "Удалить товар из корзины"
       description: "Удаляет товар по его ID."
       parameters:
-        - name: itemId
+        - name: item_id
           in: path
           required: true
           schema:
@@ -668,6 +670,133 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+
+  # ========== ГЛАВНАЯ — БАННЕРЫ (Блок И, команда Изи 90) ==========
+  /api/v1/home/banners:
+    get:
+      tags:
+        - Главная — Баннеры
+      summary: Получить активные баннеры
+      description: |
+        Возвращает список баннеров для главной страницы.
+
+        Фильтрация на стороне сервера:
+        - is_active = true
+        - now() между start_at и end_at
+        - placement = "home"
+
+        Результат отсортирован по priority (меньше значение = выше в слайдере).
+
+        Пагинация не предусмотрена — баннеров на главной обычно не более 10–15.
+        Ответ можно кэшировать (Redis / CDN), т.к. баннеры меняются редко.
+      operationId: getHomeBanners
+      responses:
+        "200":
+          description: Список активных баннеров (может быть пустым)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BannerListResponse"
+              example:
+                items:
+                  - id: "550e8400-e29b-41d4-a716-446655440000"
+                    title: "Скидки на электронику до -30%"
+                    image_url: "/cdn/banners/electronics-sale.jpg"
+                    link: "/catalog?category_id=3"
+                    priority: 10
+                  - id: "6ba7b810-9dad-11d1-80b4-00c04fd430c8"
+                    title: "Новинки сезона"
+                    image_url: "/cdn/banners/new-arrivals.jpg"
+                    link: "/collections/5"
+                    priority: 20
+                total_count: 2
+        "500":
+          description: Внутренняя ошибка сервера
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                code: "INTERNAL_ERROR"
+                message: "Не удалось загрузить баннеры"
+
+  /api/v1/banner-events:
+    post:
+      tags:
+        - Главная — Баннеры
+      summary: Отправить событие аналитики баннера
+      description: |
+        Принимает события показов (impression) и кликов (click).
+
+        Поддерживает батч-отправку: фронт может отправить несколько
+        impression-событий за один запрос (например, все баннеры
+        в слайдере, которые показались пользователю).
+
+        user_id берётся из токена авторизации (заголовок Authorization),
+        но эндпоинт работает и для неавторизованных пользователей —
+        в этом случае user_id = null.
+
+        На основе собранных событий считается CTR = clicks / impressions,
+        что позволяет маркетингу оценивать эффективность баннеров.
+      operationId: postBannerEvents
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BannerEventsRequest"
+            examples:
+              single_click:
+                summary: Один клик по баннеру
+                value:
+                  events:
+                    - banner_id: "550e8400-e29b-41d4-a716-446655440000"
+                      event: "click"
+                      timestamp: "2025-06-15T14:32:10Z"
+              batch_impressions:
+                summary: Батч показов (слайдер загрузился)
+                value:
+                  events:
+                    - banner_id: "550e8400-e29b-41d4-a716-446655440000"
+                      event: "impression"
+                      timestamp: "2025-06-15T14:32:00Z"
+                    - banner_id: "6ba7b810-9dad-11d1-80b4-00c04fd430c8"
+                      event: "impression"
+                      timestamp: "2025-06-15T14:32:00Z"
+                    - banner_id: "7c9e6679-7425-40de-944b-e07fc1f90ae7"
+                      event: "impression"
+                      timestamp: "2025-06-15T14:32:00Z"
+      responses:
+        "204":
+          description: События приняты, тело ответа отсутствует
+        "400":
+          description: Невалидные данные
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              examples:
+                empty_events:
+                  summary: Пустой массив событий
+                  value:
+                    code: "EMPTY_EVENTS"
+                    message: "Массив events не может быть пустым"
+                invalid_event_type:
+                  summary: Неизвестный тип события
+                  value:
+                    code: "INVALID_EVENT_TYPE"
+                    message: "Допустимые значения event: impression, click"
+                invalid_banner_id:
+                  summary: Несуществующий баннер
+                  value:
+                    code: "BANNER_NOT_FOUND"
+                    message: "Баннер с указанным id не найден"
+        "500":
+          description: Внутренняя ошибка сервера
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
 
 components:
   schemas:
@@ -851,9 +980,9 @@ components:
     SubscribeRequest:
       type: object
       required:
-        - notifyOn
+        - notify_on
       properties:
-        notifyOn:
+        notify_on:
           type: array
           description: >
             Список событий, на которые хочет подписаться пользователь.
@@ -876,14 +1005,14 @@ components:
           example: "6b9c1f4c-4b7c-4f8a-9a3b-6a8a2f95e2d1"
         product:
           $ref: '#/components/schemas/Product'
-        notifyOn:
+        notify_on:
           type: array
           description: События, на которые подписан пользователь
           items:
             type: string
             enum: [IN_STOCK, PRICE_DOWN]
           example: ["IN_STOCK", "PRICE_DOWN"]
-        createdAt:
+        created_at:
           type: string
           format: date-time
           description: Дата создания подписки
@@ -898,12 +1027,12 @@ components:
           format: uuid
           description: "Идентификатор товара в корзине"
           example: "f47ac10b-58cc-4372-a567-0e02b2c3d479"
-        productId:
+        product_id:
           type: string
           format: uuid
           description: "Идентификатор товара"
           example: "550e8400-e29b-41d4-a716-446655440000"
-        skuId:
+        sku_id:
           type: string
           format: uuid
           description: "Идентификатор SKU"
@@ -920,15 +1049,112 @@ components:
           type: integer
           description: "Цена в копейках"
           example: 12999000
-        isAvailable:
+        is_available:
           type: boolean
           description: "Доступен ли товар"
           example: true
-        availabilityStatus:
+        availability_status:
           type: string
           description: "Статус доступности товара"
           enum: [ACTIVE, DELETED, BLOCKED]
           example: "ACTIVE"
+
+    # ----- СХЕМЫ ДЛЯ БАННЕРОВ (Блок И, команда Изи 90) -----
+    BannerListResponse:
+      type: object
+      required:
+        - items
+        - total_count
+      properties:
+        items:
+          type: array
+          description: Список активных баннеров, отсортированных по priority
+          items:
+            $ref: "#/components/schemas/Banner"
+        total_count:
+          type: integer
+          description: Общее количество возвращённых баннеров
+          example: 3
+
+    Banner:
+      type: object
+      required:
+        - id
+        - title
+        - image_url
+        - link
+        - priority
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Уникальный идентификатор баннера
+          example: "550e8400-e29b-41d4-a716-446655440000"
+        title:
+          type: string
+          description: Заголовок баннера (для alt-текста и accessibility)
+          example: "Скидки на электронику до -30%"
+        image_url:
+          type: string
+          description: URL изображения баннера
+          example: "/cdn/banners/electronics-sale.jpg"
+        link:
+          type: string
+          description: |
+            Внутренний URL перехода при клике.
+            Примеры: /catalog?category_id=3, /products/42, /collections/1
+          example: "/catalog?category_id=3"
+        priority:
+          type: integer
+          description: |
+            Приоритет отображения (меньше значение = выше в слайдере).
+            Консистентно с полем priority в подборках (блок К).
+          example: 10
+
+    BannerEventsRequest:
+      type: object
+      required:
+        - events
+      properties:
+        events:
+          type: array
+          description: |
+            Массив событий. Поддерживает батч-отправку —
+            несколько событий за один запрос.
+          minItems: 1
+          maxItems: 50
+          items:
+            $ref: "#/components/schemas/BannerEvent"
+
+    BannerEvent:
+      type: object
+      required:
+        - banner_id
+        - event
+        - timestamp
+      properties:
+        banner_id:
+          type: string
+          format: uuid
+          description: ID баннера, к которому относится событие
+          example: "550e8400-e29b-41d4-a716-446655440000"
+        event:
+          type: string
+          enum:
+            - impression
+            - click
+          description: |
+            Тип события:
+            - impression — баннер показан пользователю
+            - click — пользователь нажал на баннер
+          example: "click"
+        timestamp:
+          type: string
+          format: date-time
+          description: |
+            Время события на клиенте (ISO 8601, UTC).
+            Нужен для точного расчёта CTR по временным интервалам.
+          example: "2025-06-15T14:32:10Z"
 
     Error:
       type: object
