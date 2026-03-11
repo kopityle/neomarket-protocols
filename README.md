@@ -48,6 +48,29 @@ git push origin {ваша-ветка}
 
 Создайте Pull Request на GitHub. При создании PR автоматически запустится валидация OpenAPI. Координатор вашего синдиката проверит и смержит.
 
+## Как смотреть документацию
+
+### Онлайн (GitHub Pages)
+
+Документация доступна по адресу: https://urfu2026-neomarket.github.io/neomarket-protocols/
+
+Swagger UI с dropdown для переключения между модулями: B2B, B2C Каталог, B2C Корзина, B2C Заказы, Moderation.
+
+### Локально
+
+```bash
+npm install
+npm run docs
+```
+
+Откроется `http://localhost:3000` с тем же Swagger UI.
+
+Если зависимости уже установлены и спеки уже собраны, можно запустить только сервер:
+
+```bash
+npm run docs:serve
+```
+
 ## Координаторы
 
 | Синдикат | Координатор |
