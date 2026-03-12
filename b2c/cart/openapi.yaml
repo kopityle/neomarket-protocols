@@ -36,24 +36,24 @@ paths:
         - Избранное
       summary: Получение списка избранных товаров
       description: |
-        Возвращает список товаров, добавленных пользователем в избранное.
-        Сервис хранит только product_id и обращается в B2B с батч-запросом
-        для получения актуальной информации о товарах, их SKU, ценах и наличии.
+        Возвращает список товаров, добавленных авторизованным пользователем в избранное.
 
-        Если B2B временно недоступен — возвращается ошибка 503.
-        Товары, которые не найдены в B2B (например, удалены из каталога),
-        исключаются из списка `items` и их идентификаторы возвращаются в поле
-        `unavailable_ids`. Клиент может предложить пользователю очистить их.
+        **Авторизация:** требуется JWT-токен в заголовке `Authorization: Bearer <token>`.
+        Идентификатор пользователя извлекается из токена автоматически.
 
+        **Как это работает:**
+        - Сервис хранит только `product_id` и дату добавления.
+        - Для получения актуальной информации о товарах (названия, цены, наличие, SKU) выполняется batch-запрос к B2B-каталогу.
+        - Товары, которые не найдены в B2B (например, удалены из каталога), **исключаются** из ответа (они автоматически удаляются или игнорируются). Клиент не получает информацию о таких товарах.
+        - Если B2B временно недоступен — возвращается ошибка 503.
+
+        **Пагинация:** поддерживается через параметры `limit` и `offset`.
+        Поле `total` содержит общее количество избранных товаров (только доступных) без учёта пагинации.
+
+        **Пустое избранное:** возвращается `items: []`, `total: 0`.
+      security:
+        - BearerAuth: []
       parameters:
-        - name: user_id
-          in: query
-          required: true
-          description: Идентификатор пользователя (UUID)
-          schema:
-            type: string
-            format: uuid
-            example: "123e4567-e89b-12d3-a456-426614174000"
         - name: limit
           in: query
           required: false
@@ -71,7 +71,6 @@ paths:
             type: integer
             minimum: 0
             default: 0
-
       responses:
         "200":
           description: Успешное получение списка избранного
@@ -79,44 +78,48 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/FavoritesResponse"
-              example:
-                items:
-                  - product:
-                      id: "550e8400-e29b-41d4-a716-446655440000"
-                      title: "iPhone 15 Pro Max"
-                      description: "Флагман Apple..."
-                      status: "MODERATED"
-                      category:
-                        id: "6ba7b810-9dad-11d1-80b4-00c04fd430c8"
-                        name: "Смартфоны"
-                      images:
-                        - url: "/s3/iphone15-1.jpg"
-                          ordering: 0
-                      characteristics:
-                        - name: "Бренд"
-                          value: "Apple"
-                      skus:
-                        - id: "7c9e6679-7425-40de-944b-e07fc1f90ae7"
-                          name: "256GB Black"
-                          price: 12999000
-                          active_quantity: 5
+              examples:
+                with_items:
+                  summary: Список с товарами
+                  value:
+                    items:
+                      - product:
+                          id: "550e8400-e29b-41d4-a716-446655440000"
+                          title: "iPhone 15 Pro Max"
+                          description: "Флагман Apple..."
+                          status: "MODERATED"
+                          category:
+                            id: "6ba7b810-9dad-11d1-80b4-00c04fd430c8"
+                            name: "Смартфоны"
+                          images:
+                            - url: "/s3/iphone15-1.jpg"
+                              ordering: 0
                           characteristics:
-                            - name: "Цвет"
-                              value: "Чёрный"
-                            - name: "Объём памяти"
-                              value: "256 ГБ"
-                        - id: "8a4e3f9c-1a2b-4c8d-9e5f-6b7a8c9d0e1f"
-                          name: "256GB White"
-                          price: 12999000
-                          active_quantity: 0
-                    added_at: "2025-03-09T12:00:00Z"
-                total: 1
-                unavailable_ids:
-                  - "9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d"
-                  - "1e2a3b4c-5d6e-7f8a-9b0c-1d2e3f4a5b6c"
-
+                            - name: "Бренд"
+                              value: "Apple"
+                          skus:
+                            - id: "7c9e6679-7425-40de-944b-e07fc1f90ae7"
+                              name: "256GB Black"
+                              price: 12999000
+                              active_quantity: 5
+                              characteristics:
+                                - name: "Цвет"
+                                  value: "Чёрный"
+                                - name: "Объём памяти"
+                                  value: "256 ГБ"
+                            - id: "8a4e3f9c-1a2b-4c8d-9e5f-6b7a8c9d0e1f"
+                              name: "256GB White"
+                              price: 12999000
+                              active_quantity: 0
+                        added_at: "2025-03-09T12:00:00Z"
+                    total: 1
+                empty:
+                  summary: Пустое избранное
+                  value:
+                    items: []
+                    total: 0
         "400":
-          description: Невалидные параметры запроса (например, limit/offset вне диапазона или некорректный UUID)
+          description: Невалидные параметры запроса (например, limit/offset вне диапазона)
           content:
             application/json:
               schema:
@@ -124,9 +127,8 @@ paths:
               example:
                 code: "INVALID_PARAMETER"
                 message: "Параметр limit должен быть от 1 до 100"
-
         "401":
-          description: Пользователь не авторизован
+          description: Пользователь не авторизован — отсутствует или недействителен JWT-токен
           content:
             application/json:
               schema:
@@ -134,17 +136,6 @@ paths:
               example:
                 code: "UNAUTHORIZED"
                 message: "Требуется авторизация"
-
-        "404":
-          description: Список избранного для пользователя не найден (пустой)
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
-              example:
-                code: "FAVORITES_NOT_FOUND"
-                message: "У пользователя нет избранных товаров"
-
         "503":
           description: B2B сервис временно недоступен
           content:
@@ -1627,22 +1618,9 @@ components:
           type: integer
           description: Общее количество товаров в избранном (без учёта пагинации)
           example: 5
-        unavailable_ids:
-          type: array
-          items:
-            type: string
-            format: uuid
-          description: |
-            Идентификаторы товаров, которые были в избранном, но не найдены в B2B
-            (например, удалены из каталога). Клиент может отобразить их как недоступные
-            и предложить очистить.
-          example:
-            - "9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d"
-            - "1e2a3b4c-5d6e-7f8a-9b0c-1d2e3f4a5b6c"
       required:
         - items
         - total
-        - unavailable_ids
 
     FavoriteMutationResponse:
       type: object
