@@ -33,7 +33,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
         '401':
-          description: Неверные учетные данные
+          description: Неверные учетные данные (например, неправильный email/username или пароль)
           content:
             application/json:
               schema:
@@ -53,7 +53,7 @@ paths:
               $ref: '#/components/schemas/RegisterRequest'
       responses:
         '201':
-          description: Клиент успешно создан
+          description: Клиент успешно создан. В ответе возвращается access_token, как при логине.
           headers:
             Location:
               description: URL созданного ресурса
@@ -63,7 +63,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Client'
+                $ref: '#/components/schemas/LoginResponse'
         '400':
           description: Ошибка валидации данных
           content:
@@ -98,6 +98,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+      description: |
+        Возвращает информацию о текущем пользователе и его сессии по access_token. Полезно для проверки авторизации, получения профиля или обновления данных на клиенте.
 
   /api/v1/auth/logout:
     post:
@@ -117,69 +119,6 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
 
-  /api/v1/clients/me:
-    get:
-      summary: Получение профиля текущего пользователя
-      operationId: getMyProfile
-      tags:
-        - Clients
-      security:
-        - bearerAuth: []
-      responses:
-        '200':
-          description: Данные профиля
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Client'
-        '401':
-          description: Токен не предоставлен или истёк
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-
-  /api/v1/clients/{id}:
-    get:
-      summary: Получение информации о клиенте
-      operationId: getClient
-      tags:
-        - Clients
-      security:
-        - bearerAuth: []
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
-      responses:
-        '200':
-          description: Информация о клиенте
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Client'
-        '401':
-          description: Не авторизован
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-        '403':
-          description: Нет доступа к профилю другого пользователя
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-        '404':
-          description: Клиент не найден
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-
 components:
   securitySchemes:
     bearerAuth:
@@ -189,21 +128,6 @@ components:
       description: "Токен сессии, получаемый при входе. Передаётся в заголовке: Authorization: Bearer <token>"
 
   schemas:
-    Client:
-      type: object
-      properties:
-        id:
-          type: string
-          format: uuid
-        name:
-          type: string
-        email:
-          type: string
-          format: email
-        createdAt:
-          type: string
-          format: date-time
-
     RegisterRequest:
       type: object
       required:
@@ -227,13 +151,18 @@ components:
 
     LoginRequest:
       type: object
+      description: |
+        Для входа можно использовать либо email, либо username. Один из них обязателен.
       required:
-        - email
         - password
       properties:
         email:
           type: string
           format: email
+          description: Email пользователя (альтернатива username)
+        username:
+          type: string
+          description: Username пользователя (альтернатива email)
         password:
           type: string
           format: password
