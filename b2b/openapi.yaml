@@ -971,7 +971,10 @@ paths:
           description: Successful Response
           content:
             application/json:
-              schema: {}
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/CategoryWithChildrenResponse"
   /api/public/categories/{category_id}/breadcrumbs:
     get:
       tags:
@@ -991,7 +994,10 @@ paths:
           description: Successful Response
           content:
             application/json:
-              schema: {}
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/CategoryResponse"
         "422":
           description: Validation Error
           content:
@@ -1079,7 +1085,8 @@ paths:
           description: Successful Response
           content:
             application/json:
-              schema: {}
+              schema:
+                $ref: "#/components/schemas/ProductListResponse"
         "422":
           description: Validation Error
           content:
@@ -1105,7 +1112,8 @@ paths:
           description: Successful Response
           content:
             application/json:
-              schema: {}
+              schema:
+                $ref: "#/components/schemas/ProductResponse"
         "422":
           description: Validation Error
           content:
@@ -1142,7 +1150,10 @@ paths:
           description: Successful Response
           content:
             application/json:
-              schema: {}
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ProductResponse"
         "422":
           description: Validation Error
           content:
@@ -1168,7 +1179,8 @@ paths:
           description: Successful Response
           content:
             application/json:
-              schema: {}
+              schema:
+                $ref: "#/components/schemas/SKUResponse"
         "422":
           description: Validation Error
           content:
