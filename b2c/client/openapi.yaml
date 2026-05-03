@@ -56,10 +56,11 @@ paths:
           description: Клиент успешно создан. В ответе возвращается access_token, как при логине.
           headers:
             Location:
-              description: URL созданного ресурса
+              description: URL профиля созданного пользователя
               schema:
                 type: string
                 format: uri
+                example: /api/v1/clients/me
           content:
             application/json:
               schema:
@@ -103,15 +104,156 @@ paths:
 
   /api/v1/auth/logout:
     post:
-      summary: Завершение сессии
+      summary: Завершение текущей сессии
       operationId: logout
       tags:
         - Auth
       security:
         - bearerAuth: []
+      description: |
+        Завершает текущую сессию пользователя, определяемую по access_token в заголовке Authorization.
+        
+        После успешного logout:
+        - access_token текущей сессии добавляется в blacklist (Redis) и становится недействительным
+        - refresh_token текущей сессии также инвалидируется
+        - session_id удаляется из базы данных активных сессий
+        
+        Повторные запросы с этим access_token будут возвращать 401 Unauthorized.
+        
+        Logout действует только на текущую сессию. Если пользователь авторизован на нескольких устройствах, 
+        другие сессии остаются активными.
       responses:
         '204':
           description: Сессия успешно завершена
+        '401':
+          description: Не авторизован или токен уже недействителен
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/auth/refresh:
+    post:
+      summary: Обновление access token с помощью refresh token
+      operationId: refreshToken
+      tags:
+        - Auth
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - refresh_token
+              properties:
+                refresh_token:
+                  type: string
+                  description: Refresh token, полученный при логине/регистрации
+      responses:
+        '200':
+          description: Новый access token успешно выдан
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginResponse'
+        '401':
+          description: Refresh token невалиден, истёк или был отозван
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '400':
+          description: Неверный формат запроса
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/clients/me:
+    get:
+      summary: Получение профиля текущего пользователя
+      operationId: getMyProfile
+      tags:
+        - Clients
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Данные профиля
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ClientProfile'
+        '401':
+          description: Токен не предоставлен или истёк
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    patch:
+      summary: Обновление профиля текущего пользователя
+      operationId: updateMyProfile
+      tags:
+        - Clients
+      security:
+        - bearerAuth: []
+      description: |
+        Обновляет профиль текущего пользователя. Все поля опциональны.
+        При смене email или password требуется указать current_password для подтверждения.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateProfileRequest'
+      responses:
+        '200':
+          description: Профиль успешно обновлён
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ClientProfile'
+        '400':
+          description: Ошибка валидации данных
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Не авторизован или неверный current_password
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Email или username уже заняты другим пользователем
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    delete:
+      summary: Удаление аккаунта текущего пользователя
+      operationId: deleteMyAccount
+      tags:
+        - Clients
+      security:
+        - bearerAuth: []
+      description: |
+        Удаляет аккаунт текущего пользователя и все связанные данные.
+        Пользователь определяется по токену в заголовке Authorization.
+        
+        После удаления:
+        - Все активные сессии пользователя инвалидируются
+        - Данные профиля удаляются из базы данных
+        - Связанные данные (корзина, избранное, история заказов) могут быть удалены или анонимизированы в соответствии с политикой хранения данных
+        
+        Операция необратима.
+      responses:
+        '204':
+          description: Аккаунт успешно удалён
         '401':
           description: Не авторизован
           content:
@@ -134,6 +276,7 @@ components:
         - username
         - email
         - password
+      additionalProperties: false
       properties:
         username:
           type: string
@@ -147,6 +290,7 @@ components:
           type: string
           format: password
           minLength: 8
+          maxLength: 128
           description: Пароль в открытом виде (хешируется на сервере)
 
     LoginRequest:
@@ -155,6 +299,10 @@ components:
         Для входа можно использовать либо email, либо username. Один из них обязателен.
       required:
         - password
+      additionalProperties: false
+      oneOf:
+        - required: [email]
+        - required: [username]
       properties:
         email:
           type: string
@@ -162,32 +310,47 @@ components:
           description: Email пользователя (альтернатива username)
         username:
           type: string
+          minLength: 3
+          maxLength: 50
           description: Username пользователя (альтернатива email)
         password:
           type: string
           format: password
           minLength: 8
+          maxLength: 128
 
     LoginResponse:
       type: object
+      required:
+        - access_token
+        - expires_in
+        - token_type
       properties:
-        accessToken:
+        access_token:
           type: string
           description: JWT токен доступа
-        refreshToken:
+        refresh_token:
           type: string
-          description: Токен для обновления сессии (рекомендуется хранить в HttpOnly cookie)
-        expiresIn:
+          description: Токен для обновления сессии. Клиент должен хранить его безопасно (например, в localStorage с защитой от XSS).
+        expires_in:
           type: integer
-          description: Время жизни accessToken в секундах
-        tokenType:
+          description: Время жизни access_token в секундах
+          example: 3600
+        token_type:
           type: string
           example: Bearer
 
     SessionInfo:
       type: object
+      required:
+        - user_id
+        - username
+        - email
+        - session_id
+        - issued_at
+        - expires_at
       properties:
-        userId:
+        user_id:
           type: string
           format: uuid
         username:
@@ -195,14 +358,14 @@ components:
         email:
           type: string
           format: email
-        sessionId:
+        session_id:
           type: string
           format: uuid
           description: Уникальный идентификатор сессии
-        issuedAt:
+        issued_at:
           type: string
           format: date-time
-        expiresAt:
+        expires_at:
           type: string
           format: date-time
 
@@ -224,3 +387,51 @@ components:
                 type: string
               issue:
                 type: string
+
+    ClientProfile:
+      type: object
+      required:
+        - id
+        - username
+        - email
+        - created_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        username:
+          type: string
+        email:
+          type: string
+          format: email
+        created_at:
+          type: string
+          format: date-time
+          description: Дата регистрации пользователя
+
+    UpdateProfileRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        username:
+          type: string
+          minLength: 3
+          maxLength: 50
+          description: Новый username (опционально)
+        email:
+          type: string
+          format: email
+          description: Новый email (опционально)
+        password:
+          type: string
+          format: password
+          minLength: 8
+          maxLength: 128
+          description: Новый пароль (опционально)
+        current_password:
+          type: string
+          format: password
+          description: Текущий пароль (обязателен при смене email или password)
+      description: |
+        Все поля опциональны. Можно обновить только те поля, которые нужно изменить.
+        При смене email или password требуется указать current_password для подтверждения.
